@@ -1,5 +1,4 @@
-import { test, expect } from "@playwright/test";
-import { openApp, createSheet, enterBarcode, modal, lineRow, inventoryRow } from "./helpers.js";
+import { test, expect, openApp, createSheet, enterBarcode, modal, lineRow, inventoryRow } from "./helpers.js";
 
 test("creates a sheet recording client, date and who prepared it", async ({ page }) => {
   await openApp(page);

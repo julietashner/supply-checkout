@@ -7,7 +7,7 @@
 :root{
   --ground:#EDF1EE; --surface:#FFFFFF; --sunk:#E3E9E5; --ink:#17211E; --muted:#56655F; --line:#D2DBD6;
   --accent:#0E6B58; --accent-ink:#FFFFFF; --accent-soft:#D5EBE4;
-  --out:#A8520E; --out-soft:#F6E4D3; --danger:#B3261E; --danger-soft:#F7DEDB;
+  --out:#8F450B; --out-soft:#F6E4D3; --danger:#B3261E; --danger-soft:#F7DEDB;
   --shadow:0 10px 40px rgba(18,33,28,.18);
   --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -65,22 +65,22 @@ button,input,select{font:inherit;color:inherit}
 .notice{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;margin-block:0 14px;color:var(--muted)}
 .notice[hidden]{display:none}
 .notice.resume{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;color:var(--ink);border-color:var(--out);background:var(--out-soft)}
-#receiptView{display:grid;gap:14px}
+#receiptView{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
 #receiptView[hidden]{display:none}
-#rBody{display:grid;gap:14px}
+#rBody{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
 .reading{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;display:grid;gap:10px;justify-items:start}
 .reading h2{font-size:30px}
 .reading p{margin:0}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 .panel h3,.rhead{font-size:20px;text-transform:uppercase;letter-spacing:.05em}
 .panel > .btn{justify-self:start}
-.dests{display:grid;gap:8px}
+.dests{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
 .dest{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .dest select{flex:1 1 180px}
-.dest input{flex:2 1 200px;width:auto}
+.dest input{flex:2 1 200px;width:auto;min-width:0}
 select{background:var(--ground);border:1px solid var(--line);border-radius:9px;padding:9px 10px;min-width:0;max-width:100%}
 .rlines{display:grid;gap:10px}
-.rline{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:8px}
+.rline{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
 .rline.matched{border-color:var(--accent)}
 .rline .lbl{display:grid;gap:3px;font-size:12px;font-weight:600;color:var(--muted)}
 .rline .lbl select,.rline .lbl input{font-size:15px;font-weight:400;color:var(--ink)}
@@ -94,11 +94,11 @@ select{background:var(--ground);border:1px solid var(--line);border-radius:9px;p
 .choice button small{font-size:11px;color:var(--muted);font-weight:600}
 .choice button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
 .choice.warn .lbl{color:var(--out)}
-.rrow{display:grid;grid-template-columns:80px 110px 1fr;gap:8px}
+.rrow{display:grid;grid-template-columns:80px 110px minmax(0,1fr);gap:8px}
 .rrow label{display:grid;gap:3px;font-size:12px;font-weight:600;color:var(--muted);min-width:0}
 .rrow input{font-family:var(--mono)}
 .rrow select{width:100%}
-@media (max-width:440px){.rrow{grid-template-columns:1fr 1fr}.rrow .grow{grid-column:1 / -1}}
+@media (max-width:440px){.rrow{grid-template-columns:repeat(2,minmax(0,1fr))}.rrow .grow{grid-column:1 / -1}}
 .ractions{display:flex;align-items:center;gap:4px}
 .ractions .num{font-weight:500}
 .spacer{flex:1}
@@ -188,7 +188,7 @@ td.charge{color:var(--ink);font-weight:500}
 .modal .code{font-family:var(--mono);color:var(--muted);font-size:13px;margin-top:-8px;word-break:break-all}
 .field{display:grid;gap:5px}
 .field label{font-size:13px;font-weight:600;color:var(--muted)}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .stepper{display:grid;grid-template-columns:56px 1fr 56px;gap:8px}
 .stepper button{border:1px solid var(--line);background:var(--sunk);border-radius:10px;font-size:24px;font-weight:600;cursor:pointer}
 .stepper input{text-align:center;font-family:var(--mono);font-size:24px;padding:10px}
@@ -485,9 +485,13 @@ function drawPrices() {
 function stepperHTML(id, val, max) {
   return `<div class="stepper"><button type="button" data-step="-1" aria-label="Fewer">−</button><input type="number" id="${id}" min="0" ${max != null ? `max="${max}"` : ""} value="${val}" inputmode="numeric"><button type="button" data-step="1" aria-label="More">+</button></div>`;
 }
+const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };
+const setHTML = (el, h) => { if (el.innerHTML !== h) el.innerHTML = h; };
 function wireStepper(m, id, onChange) {
   const inp = m.querySelector("#" + id);
-  const clamp = () => { let v = int(inp.value); if (inp.max !== "") v = Math.min(v, int(inp.max)); inp.value = v; onChange && onChange(v); };
+  // Only touch the DOM when something changed: iOS Safari drops a tap if the page
+  // changes under it, and blurring this field fires "change" mid-tap.
+  const clamp = () => { let v = int(inp.value); if (inp.max !== "") v = Math.min(v, int(inp.max)); if (inp.value !== String(v)) inp.value = v; onChange && onChange(v); };
   m.querySelectorAll("[data-step]").forEach(b => b.addEventListener("click", () => { inp.value = int(inp.value) + Number(b.dataset.step); clamp(); }));
   inp.addEventListener("input", () => onChange && onChange(int(inp.value)));
   inp.addEventListener("change", clamp);
@@ -537,7 +541,7 @@ function checkoutModal(s, code, key = keyOf(code)) {
       <div class="field"><label for="fQty">How many are you taking?</label>${stepperHTML("fQty", 1)}</div>
       <div class="modal-actions"><button type="button" class="btn" id="cancel">Cancel</button><button type="submit" class="btn primary" id="go">Add to sheet</button></div>
     </form>`, m => {
-    const getQty = wireStepper(m, "fQty", v => m.querySelector("#go").textContent = `Add ${v} to sheet`);
+    const getQty = wireStepper(m, "fQty", v => setText(m.querySelector("#go"), `Add ${v} to sheet`));
     m.querySelector("#go").textContent = "Add 1 to sheet";
     m.querySelector("#cancel").addEventListener("click", closeModal);
     m.querySelector("#f").addEventListener("submit", async e => {
@@ -615,7 +619,7 @@ function returnModal(s, code, key = keyOf(code)) {
       <div class="summary" id="sum"></div>
       <div class="modal-actions"><button type="button" class="btn" id="cancel">Cancel</button><button type="submit" class="btn primary">Save return</button></div>
     </form>`, m => {
-    const paint = r => { r = Math.min(int(r), o); m.querySelector("#sum").innerHTML = `<span>Used <b>${o - r}</b> of ${o}</span><span>Charge <b>${money((o - r) * price)}</b></span>`; };
+    const paint = r => { r = Math.min(int(r), o); setHTML(m.querySelector("#sum"), `<span>Used <b>${o - r}</b> of ${o}</span><span>Charge <b>${money((o - r) * price)}</b></span>`); };
     const getR = wireStepper(m, "fRet", paint); paint(start);
     m.querySelector("#cancel").addEventListener("click", closeModal);
     m.querySelector("#f").addEventListener("submit", async e => {
@@ -879,7 +883,7 @@ function renderReceipt() {
     </div>
     <h3 class="rhead">Items (${d.lines.length})</h3>
     <div class="rlines">${d.lines.map(lineHTML).join("")}</div>
-    <input class="vh" type="file" id="rScanFile" accept="image/*" capture="environment">
+    <input class="vh" type="file" id="rScanFile" accept="image/*" capture="environment" aria-label="Barcode photo for this item">
     <button type="button" class="btn" id="rAddLine">+ Add item</button>
     <div class="panel" id="rSum"></div>
     <label class="check"><input type="checkbox" id="rSavePrices" ${d.savePrices ? "checked" : ""}> Also add client items to inventory with their prices</label>

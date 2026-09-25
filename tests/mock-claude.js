@@ -1,7 +1,11 @@
 // In-memory stand-in for the claude.ai artifact runtime (window.claude).
 // Injected with page.addInitScript, so it must be self-contained.
 export function installMockClaude(opts) {
-  const { seed = {}, canWrite = true, userId = "u_test", receipt = null } = opts || {};
+  const {
+    seed = {}, canWrite = true, userId = "u_test", receipt = null,
+    // Failure modes: a capability that isn't available, or calls that reject
+    unavailable = [], writeError = null, sampleError = null,
+  } = opts || {};
   const clone = (o) => (o === undefined ? undefined : JSON.parse(JSON.stringify(o)));
   const docs = new Map(Object.entries(clone(seed)));
   const listeners = new Set();
@@ -9,6 +13,10 @@ export function installMockClaude(opts) {
   window.__mock = mock;
 
   const denied = () => ({ code: "invalid_argument", message: "write not allowed" });
+  const guard = () => {
+    if (!canWrite) throw denied();
+    if (writeError) throw { code: writeError, message: "simulated " + writeError };
+  };
   const notify = () => setTimeout(() => listeners.forEach((l) => l()), 0);
   const merge = (target, src) => {
     for (const [k, v] of Object.entries(src)) {
@@ -33,13 +41,13 @@ export function installMockClaude(opts) {
       id: path.split("/").pop(),
       path,
       get: async () => snap(path),
-      set: async (data) => { if (!canWrite) throw denied(); docs.set(path, clone(data)); notify(); },
+      set: async (data) => { guard(); docs.set(path, clone(data)); notify(); },
       update: async (data) => {
-        if (!canWrite) throw denied();
+        guard();
         if (!docs.has(path)) throw { code: "invalid_argument", message: "no such document" };
         merge(docs.get(path), data); notify();
       },
-      delete: async () => { if (!canWrite) throw denied(); docs.delete(path); notify(); },
+      delete: async () => { guard(); docs.delete(path); notify(); },
       onSnapshot: (next) => listen(() => snap(path), next),
       collection: (sub) => collRef(path + "/" + sub),
     };
@@ -84,9 +92,13 @@ export function installMockClaude(opts) {
   };
   const downloads = { save: async (req) => { mock.saves.push(req); return { status: "saved" }; } };
   const sample = async () => ({ text: "", truncated: false, modelTierApplied: "default" });
-  sample.json = async (prompt) => { mock.sampleCalls.push(prompt); return clone(receipt); };
+  sample.json = async (prompt) => {
+    mock.sampleCalls.push(prompt);
+    if (sampleError) throw { code: sampleError, message: "simulated " + sampleError };
+    return clone(receipt);
+  };
   sample.limits = async () => ({ maxPromptBytes: 65536, images: { maxCount: 5, maxInputBytes: 20e6, mediaTypes: ["image/jpeg", "image/png"] } });
 
   const namespaces = { db, user, downloads, sample };
-  window.claude = { use: async (name) => namespaces[name] || null };
+  window.claude = { use: async (name) => (unavailable.includes(name) ? null : namespaces[name] || null) };
 }

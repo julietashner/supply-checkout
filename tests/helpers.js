@@ -1,8 +1,23 @@
-import { expect } from "@playwright/test";
+import { test as base, expect } from "@playwright/test";
 import { page as document } from "../scripts/page.mjs";
 import { installMockClaude } from "./mock-claude.js";
 
 const ORIGIN = "https://supply-checkout.test/";
+
+// Every test fails on an uncaught exception or console error in the page.
+export const test = base.extend({
+  page: async ({ page }, use) => {
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      // Aborted font/CDN requests are expected in tests
+      if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(`console: ${m.text()}`);
+    });
+    await use(page);
+    expect(errors, "page errors").toEqual([]);
+  },
+});
+export { expect };
 
 export async function openApp(page, opts = {}) {
   // Keep tests hermetic: no fonts or CDN scripts. The app works without ZXing.

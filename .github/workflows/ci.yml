@@ -1,52 +1,129 @@
 name: CI
 
+# "CI passed" is the one required status check on main. It succeeds only when
+# every job below succeeded or was skipped because it doesn't apply to the event.
 on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
-  pull_request:
+  # The release workflow starts CI on release-please's pull request, because
+  # pull requests opened by GITHUB_TOKEN don't trigger workflows on their own.
+  workflow_dispatch:
   workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  pr-title:
+    name: PR title follows Conventional Commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # Squash merges use the PR title as the commit message, and release-please
+          # reads commit messages to pick the next version.
+          pattern='^(feat|fix|perf|refactor|docs|style|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?!?: [^ ].*$'
+          if [[ ! "$TITLE" =~ $pattern ]]; then
+            echo "::error::PR title must look like 'fix: …', 'feat: …' or 'feat(scope)!: …'. Got: $TITLE"
+            exit 1
+          fi
+
   lint:
     name: Lint and validate HTML
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run lint
 
-  test:
-    name: End-to-end tests (Chrome + iPhone Safari)
+  workflows:
+    name: Lint GitHub workflows
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium webkit
-      - run: npm test
+      - run: npm audit --audit-level=high
+      - uses: actions/dependency-review-action@v5
+        if: github.event_name == 'pull_request'
+        with:
+          fail-on-severity: moderate
+
+  test:
+    name: Tests (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: desktop-chrome
+            browser: chromium
+          - project: iphone-safari
+            browser: webkit
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: npx playwright test --project=${{ matrix.project }}
         env:
           CI: true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
           path: |
             playwright-report/
             test-results/
           retention-days: 14
+
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [pr-title, lint, workflows, dependencies, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check results
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "Job results: $RESULTS"
+          if echo "$RESULTS" | grep -Eq '"(failure|cancelled)"'; then
+            echo "::error::One or more required jobs failed or were cancelled."
+            exit 1
+          fi

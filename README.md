@@ -27,18 +27,49 @@ npx playwright install chromium webkit
 npm run check
 ```
 
-`npm run lint` runs ESLint on the app's inline script and the tests, then validates the HTML. `npm test` runs the end-to-end tests in desktop Chrome and an iPhone-sized Safari (WebKit).
+`npm run lint` runs ESLint on the app's inline script and the tests, then validates the HTML.
 
-## CI and releases
+## Tests
 
-- **CI** (`.github/workflows/ci.yml`) runs lint, HTML validation and the end-to-end tests on every pull request and on every push to `main`.
-- **Releases** (`.github/workflows/release.yml`) use [release-please](https://github.com/googleapis/release-please). Write commit messages in [Conventional Commits](https://www.conventionalcommits.org/) style:
-  - `fix: …` → patch release
-  - `feat: …` → minor release
-  - `feat!: …` or a `BREAKING CHANGE:` footer → major release
+`npm test` runs these Playwright suites in desktop Chrome and an iPhone-sized Safari (WebKit), against an in-memory mock of the claude.ai runtime (`tests/mock-claude.js`):
 
-  release-please keeps a release pull request open with the next version and changelog. Merging it tags the release, re-runs the full check suite, and attaches `index.html` to the GitHub Release.
-- **Dependabot** opens weekly update PRs for npm packages and GitHub Actions.
+| Suite | What it checks |
+| --- | --- |
+| `app.spec.js` | Core flows: sheets, checkout and return, storage counts, items without barcodes, receipt review, CSV export, view-only access |
+| `a11y.spec.js` | axe-core WCAG 2.1 A/AA scan of every screen, in light and dark mode |
+| `layout.spec.js` | No sideways scrolling at 320px and 390px phone widths |
+| `resilience.spec.js` | Missing capabilities, failed receipt reads, full storage, lost write permission, and resuming an unsaved receipt |
+
+Every test also fails if the page throws an uncaught error or logs a console error.
+
+## Contributing to main
+
+`main` is protected. Every change goes through a pull request that is **squash-merged**, and the PR title becomes the commit message. Merging requires the **CI passed** check, and the branch must be up to date with `main`. Force pushes and branch deletion are blocked, and history stays linear.
+
+Write PR titles in [Conventional Commits](https://www.conventionalcommits.org/) style. CI rejects titles that don't match.
+
+- `fix: …` → patch release
+- `feat: …` → minor release
+- `feat!: …` → major release
+- `docs:`, `test:`, `ci:`, `chore:`, `refactor:` → no release on their own
+
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request, on pushes to `main`, and on release-please's pull request. The **CI passed** job succeeds only if every job below passes (or is skipped because it doesn't apply):
+
+| Job | Gate |
+| --- | --- |
+| PR title | Conventional Commits format |
+| Lint and validate HTML | ESLint on the app script and tests, html-validate on the markup |
+| Lint GitHub workflows | actionlint |
+| Dependency audit | `npm audit` fails on high-severity advisories; dependency review fails a PR that adds a moderate-or-worse vulnerable package |
+| Tests (desktop-chrome), Tests (iphone-safari) | All four test suites, in parallel. A failure uploads the Playwright report and traces as a workflow artifact |
+
+## Releases
+
+`.github/workflows/release.yml` uses [release-please](https://github.com/googleapis/release-please). It keeps a release pull request open with the next version number and changelog, and starts CI on it (pull requests opened by GitHub Actions don't start CI on their own). Merging that PR tags the version, re-runs the full CI suite, and attaches `index.html` to the GitHub Release.
+
+Dependabot opens weekly update PRs for npm packages and GitHub Actions.
 
 ## Publishing to claude.ai
 
