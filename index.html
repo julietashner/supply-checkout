@@ -233,7 +233,7 @@ td.charge{color:var(--ink);font-weight:500}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3"/><path d="M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>
           <span id="scanLabel">Scan barcode</span>
         </label>
-        <input class="vh" type="file" id="scanFile" accept="image/*" capture="environment">
+        <input class="vh" type="file" id="scanFile" accept="image/*" capture="environment" aria-label="Barcode photo">
         <form class="manual" id="manualForm">
           <label class="vh" for="manualCode">Barcode number</label>
           <input type="text" id="manualCode" inputmode="numeric" autocomplete="off" placeholder="Or type the barcode">
@@ -250,7 +250,7 @@ td.charge{color:var(--ink);font-weight:500}
     <button type="button" class="btn ghost back" id="rBack">← All sheets</button>
     <div id="rBody"></div>
   </section>
-  <input class="vh" type="file" id="receiptFile" accept="image/*">
+  <input class="vh" type="file" id="receiptFile" accept="image/*" aria-label="Receipt photo">
 </div>
 
 <div class="overlay" id="overlay" hidden><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
@@ -269,7 +269,6 @@ const keyOf = code => { let k = String(code).trim().replace(/[^A-Za-z0-9_\-.~:@+
 const int = v => Math.max(0, Math.floor(Number(v) || 0));
 const codeText = c => c ? "Barcode " + c : "No barcode";
 const hasStock = p => p && typeof p.stock === "number";
-const stockText = p => hasStock(p) ? `${p.stock} in storage` : "Not counted";
 async function bumpStock(key, delta) {
   // Adds (or removes) units from the storage count. Items nobody has counted stay uncounted when removing.
   const p = products[key]; if (!p || !delta) return true;
@@ -331,6 +330,8 @@ function totals(sheet) {
   return { out, ret, used, charge, value, count: Object.keys(sheet.items || {}).length };
 }
 const currentSheet = () => sheets.find(s => s.id === ui.sheetId);
+// Show a sheet we just created right away; the next snapshot replaces this copy
+const addLocalSheet = (id, body) => { if (!sheets.some(s => s.id === id)) sheets = [{ id, ...body }, ...sheets]; };
 function personHTML(s) {
   if (s.createdBy) {
     const p = people[s.createdBy];
@@ -516,7 +517,7 @@ function newSheetModal(existing) {
       const ref = db.collection("sheets").doc();
       const body = { client, date, createdBy: myId || null, createdAt: new Date().toISOString(), status: "open", items: {} };
       if (needName) body.createdByName = m.querySelector("#fBy").value.trim();
-      if (await write(() => ref.set(body), "Sheet created")) { closeModal(); ui.sheetId = ref.id; ui.mode = "out"; draw(); }
+      if (await write(() => ref.set(body), "Sheet created")) { addLocalSheet(ref.id, body); closeModal(); ui.sheetId = ref.id; ui.mode = "out"; draw(); }
     });
   });
 }
@@ -1064,6 +1065,7 @@ async function saveReceipt(btn) {
       if (!myId) body.createdByName = d.by.trim();
       if (d.store) body.source = { store: d.store, receiptDate: d.receiptDate };
       ok = await write(() => ref.set(body));
+      if (ok) addLocalSheet(ref.id, body);
       if (ok) savedIds.push(ref.id);
     }
     if (!ok) {
@@ -1077,7 +1079,7 @@ async function saveReceipt(btn) {
   ui.tab = "sheets"; draw(); window.scrollTo(0, 0);
   const nStock = toStock.reduce((a, l) => a + int(l.qty), 0);
   toast([savedIds.length ? `Saved to ${savedIds.length} sheet${savedIds.length === 1 ? "" : "s"}` : "", nStock ? `${nStock} added to storage` : ""].filter(Boolean).join(" · "));
-  if (!savedIds.length) ui.tab = "prices", draw();
+  if (!savedIds.length) { ui.tab = "prices"; draw(); }
 }
 
 $("#receiptFile").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f && sampleFn) startReceipt(f); });
