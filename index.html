@@ -609,23 +609,39 @@ function returnModal(s, code, key = keyOf(code)) {
     return;
   }
   const o = int(line.out), price = Number(line.price) || 0;
-  const start = Math.min(o, int(line.returned) || 1);
+  const already = Math.min(int(line.returned), o), left = o - already;
+  if (!left) {
+    openModal(`
+      <h2>Already returned</h2>
+      <div class="code">${esc(codeText(code))}</div>
+      <p style="margin:0">All ${o} of <strong>${esc(line.name)}</strong> have been returned. To correct the counts, tap the item's row on the sheet.</p>
+      <div class="modal-actions"><button type="button" class="btn primary" id="cancel">Close</button></div>`, m => {
+      m.querySelector("#cancel").addEventListener("click", closeModal);
+    });
+    return;
+  }
   openModal(`
     <h2>Return</h2>
     <div class="code">${esc(codeText(code))}</div>
-    <div class="item-known"><strong>${esc(line.name)}</strong><span class="num">${o} taken</span></div>
+    <div class="item-known"><strong>${esc(line.name)}</strong><span class="num">${o} taken${already ? ` · ${already} back` : ""}</span></div>
     <form id="f" style="display:grid;gap:14px">
-      <div class="field"><label for="fRet">How many are coming back unused?</label>${stepperHTML("fRet", start, o)}</div>
+      <div class="field"><label for="fRet">How many are you returning now?</label>${stepperHTML("fRet", 1, left)}</div>
       <div class="summary" id="sum"></div>
       <div class="modal-actions"><button type="button" class="btn" id="cancel">Cancel</button><button type="submit" class="btn primary">Save return</button></div>
     </form>`, m => {
-    const paint = r => { r = Math.min(int(r), o); setHTML(m.querySelector("#sum"), `<span>Used <b>${o - r}</b> of ${o}</span><span>Charge <b>${money((o - r) * price)}</b></span>`); };
-    const getR = wireStepper(m, "fRet", paint); paint(start);
+    const paint = r => {
+      const back = already + Math.min(int(r), left);
+      setHTML(m.querySelector("#sum"), `<span>Returned <b>${back}</b> of ${o}</span><span>Used <b>${o - back}</b></span><span>Charge <b>${money((o - back) * price)}</b></span>`);
+    };
+    const getR = wireStepper(m, "fRet", paint); paint(1);
     m.querySelector("#cancel").addEventListener("click", closeModal);
     m.querySelector("#f").addEventListener("submit", async e => {
       e.preventDefault();
-      const r = Math.min(getR(), o), delta = r - Math.min(int(line.returned), o);
-      if (await write(() => db.doc("sheets/" + s.id).update({ items: { [key]: { returned: r } } }), `${r} returned · ${o - r} used`)) { closeModal(); await bumpStock(key, delta); }
+      const r = getR(); if (!r) { toast("Choose at least 1."); return; }
+      // Add to the latest count, in case someone else recorded a return meanwhile
+      const cur = ((currentSheet() || s).items || {})[key] || line;
+      const out = int(cur.out), before = Math.min(int(cur.returned), out), back = Math.min(out, before + r);
+      if (await write(() => db.doc("sheets/" + s.id).update({ items: { [key]: { returned: back } } }), `${back - before} returned · ${back} of ${out} back`)) { closeModal(); await bumpStock(key, back - before); }
     });
   });
 }
