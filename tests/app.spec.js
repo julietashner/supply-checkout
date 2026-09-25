@@ -141,3 +141,41 @@ test("view-only users can't make changes", async ({ page }) => {
   await expect(page.locator("#notice")).toContainText("view-only access");
   await expect(page.getByRole("button", { name: "+ New sheet" })).toHaveCount(0);
 });
+
+test("returning the same item again adds to what's already been returned", async ({ page }) => {
+  await openApp(page, {
+    seed: {
+      "products/SKU1": { code: "SKU1", name: "Paper towels", price: 2, stock: 0 },
+      "sheets/s1": {
+        client: "Kilo Kitchens", date: "2026-09-25", createdBy: "u_test", createdAt: "2026-09-25T12:00:00Z", status: "open",
+        items: { SKU1: { code: "SKU1", name: "Paper towels", price: 2, out: 5, returned: 0 } },
+      },
+    },
+  });
+  await page.getByRole("button", { name: /Kilo Kitchens/ }).click();
+  await page.getByRole("button", { name: "Return", exact: true }).click();
+
+  await enterBarcode(page, "SKU1");
+  await modal(page).locator("#fRet").fill("2");
+  await modal(page).getByRole("button", { name: "Save return" }).click();
+  await expect(page.locator(".totals")).toContainText("Returned2");
+
+  // Second return starts from what's left and adds to the count
+  await enterBarcode(page, "SKU1");
+  await expect(modal(page)).toContainText("5 taken · 2 back");
+  await expect(modal(page).locator("#fRet")).toHaveAttribute("max", "3");
+  await modal(page).locator("#fRet").fill("3");
+  await expect(modal(page).locator("#sum")).toContainText("Returned 5 of 5");
+  await modal(page).getByRole("button", { name: "Save return" }).click();
+  await expect(page.locator(".totals")).toContainText("Returned5");
+  await expect(page.locator(".totals .charge")).toHaveText("$0.00");
+
+  // Nothing left to return
+  await enterBarcode(page, "SKU1");
+  await expect(modal(page).getByRole("heading", { name: "Already returned" })).toBeVisible();
+  await modal(page).getByRole("button", { name: "Close" }).click();
+
+  // Both returns went back into storage
+  await page.getByRole("button", { name: "Inventory" }).click();
+  await expect(inventoryRow(page, "Paper towels").locator("td").nth(1)).toHaveText("5");
+});
